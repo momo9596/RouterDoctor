@@ -303,7 +303,15 @@ fun HomeScreen(ip: String, onIpChange: (String) -> Unit, goReboot: () -> Unit) {
                     val sp = withContext(Dispatchers.IO) { downloadMbps() }
                     sb.append("\nسرعة التحميل: ${sp?.let { String.format("%.1f", it) + " Mbps" } ?: "تعذر القياس"}\n")
 
-                    sb.append("\nطبّق القيم أعلاه في إعدادات الراوتر ثم أعد تشغيله.")
+                    log = sb.toString() + "\nجاري تطبيق الإصلاحات على الراوتر..."
+val ranked = dnsResults.filter { it.third != null }.sortedBy { it.third }
+val d1 = ranked.getOrNull(0)?.second
+val d2 = ranked.getOrNull(1)?.second
+val chNum = withContext(Dispatchers.IO) { bestChannelNumber(context) }
+val fixLog = withContext(Dispatchers.IO) {
+    TpLinkClient(ip, user, pass).applyAll(d1, d2, chNum)
+}
+sb.append("\n").append(fixLog)
                     log = sb.toString()
                     running = false
                     done = true
