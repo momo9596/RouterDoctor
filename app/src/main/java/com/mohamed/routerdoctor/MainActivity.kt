@@ -1,7 +1,6 @@
 package com.mohamed.routerdoctor
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -22,7 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.net.Inet4Address
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.InetAddress
 
 val NeonGreen = Color(0xFF39FF14)
 val DarkBg = Color(0xFF0A0A0A)
@@ -38,15 +40,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// اكتشاف IP الراوتر (Gateway) تلقائيًا
 fun getRouterIp(context: Context): String {
     return try {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val props = cm.getLinkProperties(cm.activeNetwork)
-        val gateway = props?.routes
-            ?.firstOrNull { it.isDefaultRoute && it.gateway is Inet4Address }
-            ?.gateway?.hostAddress
-        gateway ?: "192.168.1.1"
+        val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        @Suppress("DEPRECATION")
+        val gw = wm.dhcpInfo.gateway
+        if (gw != 0) {
+            "${gw and 0xFF}.${(gw shr 8) and 0xFF}.${(gw shr 16) and 0xFF}.${(gw shr 24) and 0xFF}"
+        } else "192.168.1.1"
     } catch (e: Exception) {
         "192.168.1.1"
     }
@@ -57,6 +58,8 @@ fun HomeScreen(routerIp: String) {
     var ip by remember { mutableStateOf(routerIp) }
     var user by remember { mutableStateOf("admin") }
     var pass by remember { mutableStateOf("admin") }
+    var result by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -68,7 +71,6 @@ fun HomeScreen(routerIp: String) {
     ) {
         Spacer(Modifier.height(30.dp))
 
-        // اسم المطور - خط عريض فسفوري مضيء
         Text(
             text = "محمد إبراهيم",
             style = TextStyle(
@@ -114,7 +116,22 @@ fun HomeScreen(routerIp: String) {
 
         Spacer(Modifier.height(24.dp))
         Button(
-            onClick = { /* الخطوة القادمة: الفحص والإصلاح */ },
+            onClick = {
+                result = "جاري الفحص..."
+                scope.launch {
+                    val msg = withContext(Dispatchers.IO) {
+                        val t1 = System.currentTimeMillis()
+                        val ok = try { InetAddress.getByName(ip).isReachable(2000) } catch (e: Exception) { false }
+                        val routerPing = System.currentTimeMillis() - t1
+                        val t2 = System.currentTimeMillis()
+                        val net = try { InetAddress.getByName("8.8.8.8").isReachable(2000) } catch (e: Exception) { false }
+                        val netPing = System.currentTimeMillis() - t2
+                        "الراوتر: " + (if (ok) "$routerPing ms" else "لا يستجيب") +
+                        "\nالإنترنت: " + (if (net) "$netPing ms" else "لا يوجد اتصال")
+                    }
+                    result = msg
+                }
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = NeonGreen,
                 contentColor = Color.Black
@@ -123,5 +140,8 @@ fun HomeScreen(routerIp: String) {
         ) {
             Text("فحص وإصلاح", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
+
+        Spacer(Modifier.height(20.dp))
+        Text(result, color = NeonGreen, fontSize = 18.sp)
     }
 }
